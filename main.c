@@ -81,7 +81,7 @@ Uint16          *CreateRefractionTable();
 bool         EventProc();
 void             RippleOut(int x, int y);
 void         Calculate();
-void         PaintToSurface(SDL_Surface *target);
+void         Draw();
 void         ExitProc();
 
 
@@ -144,7 +144,7 @@ int main(int argc, char **argv)
     while(!EventProc())
     {
         // 水面をスクリーンサーフェスに描画する
-        PaintToSurface(g_pScreen);
+        Draw();
 
         // 水面データを入れ替える
         PosData *tmp = g_pPrevData;
@@ -518,18 +518,21 @@ void InitSDL()
     }
 
     // GL Setup
+    // Depth Buffer
+    glEnable(GL_DEPTH_TEST);
+    
     // Culling
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     glEnable(GL_CULL_FACE);
     
-    // clear color
-    glClearColor(0, 0, 0, 0);
+    // Clear Color
+    glClearColor(0.0, 0.0, 0.0, 0.0);
 
-    // viewport
+    // Viewport
     glViewport(0, 0, g_Conf.wndWidth, g_Conf.wndHeight);
 
-    // Change to the projection matrix and set our viewing volume.
+    // Projection Matrix and set our viewing volume.
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     float ratio = (float)g_Conf.wndWidth / (float)g_Conf.wndHeight;
@@ -807,50 +810,50 @@ void RippleOut(int x, int y)
 
 
 /* 水面描画関数 */
-void PaintToSurface(SDL_Surface *target)
+void Draw()
 {
+    // Clear screen
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    // shading model
+    
+    // Set shading model
     glShadeModel(GL_FLAT);
-    // Depth Buffer
-    glEnable(GL_DEPTH_TEST);
+    
+    // Set polygon mode
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    
+    // Set modelview matrix
     glMatrixMode(GL_MODELVIEW);
-/*
-    gluLookAt(5.0, 5.0, 5.0,     // Position of the eye point.
-              0.0, 0.0, 0.0,     // Position of the reference point.
-              0.0, 1.0, 0.0);    // Up vector.
-*/
     glLoadIdentity();
-    glTranslatef(0.0, 0.0, -75.0);
-    glRotatef(30.0, 1.0, 0.0, 0.0);
+    gluLookAt(0.0, 40.0, 80.0,   // Position of the eye point
+              0.0, 0.0, 0.0,     // Position of the reference point
+              0.0, 1.0, 0.0);    // Up vector
+
+    // Start draw
+    int pitch = g_Conf.widthRes + 2;
+    PosData *waterMain = g_pNextData;
+    PosData *waterSub = g_pNextData + pitch;
+    float scale = 50.0 * 100.0 / g_Conf.riplDepth;
+    for (int y = 0; y < g_Conf.heightRes -1; y++)
     {
-        int pitch = g_Conf.widthRes + 2;
-        PosData *waterMain = g_pNextData;
-        PosData *waterSub = g_pNextData + pitch;
-        float s = 50.0 * 100.0 / g_Conf.riplDepth;
-        for (int y = 0; y < g_Conf.heightRes -1; y++)
+        float vyMain = -100.0 + y * 200.0 / (g_Conf.heightRes - 1);
+        float vySub = -100.0 + (y + 1) * 200.0 / (g_Conf.heightRes - 1);
+        // Draw line polygons
+        glBegin(GL_QUAD_STRIP);
         {
-            float vyMain = -100.0 + y * 200.0 / (g_Conf.heightRes - 1);
-            float vySub = -100.0 + (y + 1) * 200.0 / (g_Conf.heightRes - 1);
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            glBegin(GL_QUAD_STRIP);
+            glColor3f(1.0, 1.0, 1.0);
+            for (int x = 0; x < g_Conf.widthRes; x++)
             {
-                int x = 0;
                 float vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
-                glColor3f(1.0, 1.0, 1.0);
-                for (x = 0; x < g_Conf.widthRes; x++)
-                {
-                    vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
-                    glVertex3f(vx, waterMain[x] * s / g_Conf.depthRes, vyMain);
-                    glVertex3f(vx, waterSub[x] * s / g_Conf.depthRes, vySub);
-                }
+                glVertex3f(vx, waterMain[x] * scale / g_Conf.depthRes, vyMain);
+                glVertex3f(vx, waterSub[x] * scale / g_Conf.depthRes, vySub);
             }
-            glEnd();
-            waterMain += pitch;
-            waterSub += pitch;
         }
+        glEnd();
+        waterMain += pitch;
+        waterSub += pitch;
     }
-    // 表示を更新
+    
+    // Update screen
     SDL_GL_SwapBuffers();
 }
 
