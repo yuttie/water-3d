@@ -14,7 +14,7 @@ INCLUDES = -I.
 LIBS     = `sdl-config --libs` -lSDL_gfx -lGL -lGLU
 RM       = rm -f
 PROF     = gprof
-TARGET   = water
+TARGET   = water3d
 OBJS     = main.o imgscale.o
 
 # Rules

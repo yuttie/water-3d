@@ -1,7 +1,7 @@
 /*
  *******************************************************************************
  *
- *  main.c - Water-3d
+ *  main.c - Water-3D
  *
  *  Copyright  2004  Yuta Taniguchi
  *******************************************************************************
@@ -187,8 +187,8 @@ void InitProc(int argc, char **argv)
     g_Conf.heightRes = 320;
     g_Conf.wndWidth = g_Conf.widthRes;
     g_Conf.wndHeight = g_Conf.heightRes;
-    g_Conf.wndWidth = 320;
-    g_Conf.wndHeight = 240;
+    g_Conf.wndWidth = 640;
+    g_Conf.wndHeight = 480;
     g_Conf.attRate = 0.99;
     g_Conf.scale = g_Conf.depthRes / 200.0;
     g_Conf.csrIPDiv = 1;
@@ -809,20 +809,21 @@ void PaintToSurface(SDL_Surface *target)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    glTranslatef(-50.0, 0.0, -20.0);
-    glRotatef(60.0, 1.0, 0.0, 0.0);
+    glTranslatef(-75.0, 0.0, -75.0);
+    glRotatef(30.0, 1.0, 0.0, 0.0);
     {
         PosData *waterData = g_pNextData;
+        float s = 200.0;
         for (int y = 0; y < g_Conf.heightRes -1; y++)
         {
             for (int x = 0; x < g_Conf.widthRes - 1; x++)
             {
                 glBegin(GL_LINE_LOOP);
                     glColor3f(1.0, 1.0, 1.0);
-                    glVertex3f(x, waterData[x + y * (g_Conf.widthRes + 2)] * 40.0 / g_Conf.depthRes, y);
-                    glVertex3f(x, waterData[x + (y + 1) * (g_Conf.widthRes + 2)] * 40.0 / g_Conf.depthRes, y + 1);
-                    glVertex3f(x + 1, waterData[x + 1 + (y + 1) * (g_Conf.widthRes + 2)] * 40.0 / g_Conf.depthRes, y + 1);
-                    glVertex3f(x + 1, waterData[x + 1 + y * (g_Conf.widthRes + 2)] * 40.0 / g_Conf.depthRes, y);
+                    glVertex3f(x, waterData[x + y * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y);
+                    glVertex3f(x, waterData[x + (y + 1) * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y + 1);
+                    glVertex3f(x + 1, waterData[x + 1 + (y + 1) * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y + 1);
+                    glVertex3f(x + 1, waterData[x + 1 + y * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y);
                 glEnd();
             }
         }
