@@ -9,14 +9,15 @@
 
 
 /* <<< Changelog >>>
+ * >>> Sat, 07 Aug 2004 00:14:51 +0900 <<<
+ * New:  F10キーでRedqueen形式の頂点情報と形状情報をdata.rrtファイルに出力するようにした。
+ * New:  ウィンドウ上のマウスカーソルの座標を、仮想水面上の座標にマッピングするようにした。
+ * New:  水際で自由端反射するようにした。
+ * 
  * >>> Wed, 04 Aug 2004 00:17:51 +0900 <<<
  * New:  基本サイズの波紋の表示上の大きさがどれも同じになるようにした。
- * New:  ウィンドウ上のマウスカーソルの座標を、仮想水面上の座標にマッピングするようにした。
  * New:  表示上の水面の大きさを200x200の固定にした。
  * New:  辺のみ描画するようにした。
-
-
- * New:  sss
  */
 
 
@@ -25,6 +26,9 @@
 
 
 /* <<< To Do >>>
+ * FPSだけでなく、ポリゴン数/秒、頂点数/秒も表示できるようにする
+ * 初期値読み込み
+ * データ書き出し
  */
 
 
@@ -69,6 +73,10 @@ typedef struct __ProgConfig
     int    csrIPDiv;        // カーソルの補間を何分割で行うか
     bool   isFullScreen;    // フルスクリーンか否か
 } ProgConfig;
+typedef struct __Vector3
+{
+    double x, y, z;
+} Vector3;
 
 
 /* Function Prototype Declaration */
@@ -79,6 +87,8 @@ void             InitSDL();
 PosData         *CreateRippleData();
 Uint16          *CreateRefractionTable();
 bool         EventProc();
+void             WriteOutRRT(char *fname);
+Vector3          Get3DCoordinate(int x, int y);
 void             RippleOut(int x, int y);
 void         Calculate();
 void         Draw();
@@ -186,8 +196,8 @@ void InitProc(int argc, char **argv)
     g_Conf.depthRes = 512;
     g_Conf.riplRadius = 4;
     g_Conf.riplDepth = 20.0;
-    g_Conf.widthRes = 160;
-    g_Conf.heightRes = 160;
+    g_Conf.widthRes = 80;
+    g_Conf.heightRes = 80;
     g_Conf.wndWidth = 640;
     g_Conf.wndHeight = 480;
     g_Conf.attRate = 0.99;
@@ -250,7 +260,7 @@ void InitProc(int argc, char **argv)
     g_pCrntRipl = CreateRippleData();
     
     // 屈折テーブルを作成
-    g_pRfraTbl = CreateRefractionTable();
+//    g_pRfraTbl = CreateRefractionTable();
     
     // 屈折テーブルアクセス時に必要なオフセットを加算しておく
 //    g_pRfraTbl += (g_Conf.depthRes * (MaxWaterHeight - MinWaterHeight + 1)) - MinWaterHeight;
@@ -276,6 +286,10 @@ bool EventProc()
             // キーダウンイベント
             switch (event.key.keysym.sym)
             {
+            case SDLK_F10:
+                // データ出力キー
+                WriteOutRRT("data.rrt");
+                break;
             case SDLK_ESCAPE:
             case SDLK_q:
                 // 終了キー(ESC, Q)
@@ -291,9 +305,14 @@ bool EventProc()
             // マウスのボタンが押されている時
             if (event.button.state == SDL_PRESSED)
             {
+                // 3D空間上の座標を得る
+                Vector3 pos = Get3DCoordinate(event.button.x, event.button.y);
                 // ウィンドウ上の点を水面上の位置に変換
-                int vx = (float)g_Conf.widthRes * event.button.x / g_Conf.wndWidth;
-                int vy = (float)g_Conf.heightRes * event.button.y / g_Conf.wndHeight;
+                int vx = (pos.x + 100.0) * (g_Conf.widthRes - 1) / 200.0;
+                int vy = (pos.z + 100.0) * (g_Conf.heightRes - 1) / 200.0;
+                // ウィンドウ上の点を水面上の位置に変換
+//                vx = (float)g_Conf.widthRes * event.button.x / g_Conf.wndWidth;
+//                vy = (float)g_Conf.heightRes * event.button.y / g_Conf.wndHeight;
                 // 波紋発生可能領域にいるかどうかをチェック
                 if ((leftLimit < vx) && (vx < rightLimit) &&
                     (topLimit < vy) && (vy < bottomLimit))
@@ -310,9 +329,14 @@ bool EventProc()
             // マウスのボタンが押されている時
             if (event.motion.state == SDL_PRESSED)
             {
+                // 3D空間上の座標を得る
+                Vector3 pos = Get3DCoordinate(event.motion.x, event.motion.y);
                 // ウィンドウ上の点を水面上の位置に変換
-                int vx = (float)g_Conf.widthRes * event.motion.x / g_Conf.wndWidth;
-                int vy = (float)g_Conf.heightRes * event.motion.y / g_Conf.wndHeight;
+                int vx = (pos.x + 100.0) * (g_Conf.widthRes - 1) / 200.0;
+                int vy = (pos.z + 100.0) * (g_Conf.heightRes - 1) / 200.0;
+                // ウィンドウ上の点を水面上の位置に変換
+//                vx = (float)g_Conf.widthRes * event.motion.x / g_Conf.wndWidth;
+//                vy = (float)g_Conf.heightRes * event.motion.y / g_Conf.wndHeight;
                 // 波紋発生可能領域にいるかどうかをチェック
                 if ((leftLimit < vx) && (vx < rightLimit) &&
                     (topLimit < vy) && (vy < bottomLimit))
@@ -519,6 +543,8 @@ void InitSDL()
 
     // GL Setup
     // Depth Buffer
+    glClearDepth(1.0);
+    glDepthFunc(GL_LESS);
     glEnable(GL_DEPTH_TEST);
     
     // Culling
@@ -655,7 +681,23 @@ void Calculate()
     nextData += 1 * (SurfaceWidth + 2) + 1;
     crntData += 1 * (SurfaceWidth + 2) + 1;
     prevData += 1 * (SurfaceWidth + 2) + 1;
-
+    
+    // 自由端反射化
+    PosData *tmpMain = g_pCrntData;
+    PosData *tmpSub = g_pCrntData + (SurfaceWidth + 2);
+    for (int x = 1; x < SurfaceWidth + 1; x++)
+        tmpMain[x] = tmpSub[x];
+    for (int y = 1; y < SurfaceHeight + 1; y++)
+    {
+        tmpMain += (SurfaceWidth + 2);
+        tmpSub += (SurfaceWidth + 2);
+        tmpMain[0] = tmpMain[1];
+        tmpMain[SurfaceWidth + 1] = tmpMain[SurfaceWidth];
+    }
+    for (int x = 1; x < SurfaceWidth + 1; x++)
+        tmpSub[x] = tmpMain[x];
+    
+    // シミュレート
     for (int y = 0; y < SurfaceHeight; y++)
     {
         for (int x = 0; x < SurfaceWidth; x += 4)
@@ -723,7 +765,6 @@ void Calculate()
             // SHHHHHHH LLLLLLL0 00000000 0000000L
             // 4.完成
             //                   SHHHHHHH LLLLLLLL
-            // FPS=76.08
             asm volatile (
                 // ■□■□ここから波を静める処理□■□■
                 // mm0 
@@ -753,6 +794,65 @@ void Calculate()
     
     // MMX終了
     asm ("emms\n");
+}
+
+
+/* RRT形式頂点情報書き出し関数 */
+void WriteOutRRT(char *fname)
+{
+    int pitch = g_Conf.widthRes + 2;
+    PosData *waterMain = g_pNextData;
+    PosData *waterSub = g_pNextData + pitch;
+    waterMain += pitch;
+    waterSub += pitch;
+    float scale = 50.0 * 100.0 / g_Conf.riplDepth;
+    FILE *out = fopen(fname, "wb");
+    fprintf(out, "<vertices>\n");
+    for (int y = 1; y < g_Conf.heightRes + 1; y++)
+    {
+        float vy = -100.0 + y * 200.0 / (g_Conf.heightRes - 1);
+        for (int x = 1; x < g_Conf.widthRes + 1; x++)
+        {
+            float vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
+            fprintf(out, "    <vertex x=\"%f\" y=\"%f\" z=\"%f\" />\n", vx, vy, waterMain[x] * scale / g_Conf.depthRes);
+        }
+        waterMain += pitch;
+        waterSub += pitch;
+    }
+    fprintf(out, "</vertices>\n");
+    fprintf(out, "<triangles>\n");
+    for (int y = 0; y < g_Conf.heightRes; y++)
+    {
+        for (int x = 0; x < g_Conf.widthRes; x++)
+        {
+            int n = x + y * g_Conf.widthRes;
+            fprintf(out, "    <triangle id0=\"%d\" id1=\"%d\" id2=\"%d\" />\n", n, n + g_Conf.widthRes, n + 1);
+            fprintf(out, "    <triangle id0=\"%d\" id1=\"%d\" id2=\"%d\" />\n", n + 1, n + g_Conf.widthRes, n + 1 + g_Conf.widthRes);
+        }
+        waterMain += pitch;
+        waterSub += pitch;
+    }
+    fprintf(out, "</triangles>\n");
+    fclose(out);
+}
+
+
+/* ウィンドウ上の座標から3D空間上の座標を得る関数 */
+Vector3 Get3DCoordinate(int x, int y)
+{
+    GLdouble model[16], proj[16];
+    GLint view[4];
+    GLfloat z;
+    Vector3 pos;
+
+    glGetDoublev(GL_MODELVIEW_MATRIX, model);
+    glGetDoublev(GL_PROJECTION_MATRIX, proj);
+    glGetIntegerv(GL_VIEWPORT, view);
+
+    glReadPixels(x, g_Conf.wndHeight - y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &z);
+    gluUnProject(x, g_Conf.wndHeight - y, z, model, proj, view, &pos.x, &pos.y, &pos.z);
+
+    return pos;
 }
 
 
@@ -818,13 +918,10 @@ void Draw()
     // Set shading model
     glShadeModel(GL_FLAT);
     
-    // Set polygon mode
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    
     // Set modelview matrix
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(0.0, 40.0, 80.0,   // Position of the eye point
+    gluLookAt(0.0, 80.0, 160.0,   // Position of the eye point
               0.0, 0.0, 0.0,     // Position of the reference point
               0.0, 1.0, 0.0);    // Up vector
 
@@ -832,20 +929,40 @@ void Draw()
     int pitch = g_Conf.widthRes + 2;
     PosData *waterMain = g_pNextData;
     PosData *waterSub = g_pNextData + pitch;
+    waterMain += pitch;
+    waterSub += pitch;
     float scale = 50.0 * 100.0 / g_Conf.riplDepth;
-    for (int y = 0; y < g_Conf.heightRes -1; y++)
+    for (int y = 1; y < g_Conf.heightRes + 1; y++)
     {
         float vyMain = -100.0 + y * 200.0 / (g_Conf.heightRes - 1);
         float vySub = -100.0 + (y + 1) * 200.0 / (g_Conf.heightRes - 1);
-        // Draw line polygons
+
+        // Draw polygons' surface
+        // Set polygon mode
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glBegin(GL_QUAD_STRIP);
         {
-            glColor3f(1.0, 1.0, 1.0);
-            for (int x = 0; x < g_Conf.widthRes; x++)
+            glColor3f(0.0, 0.0, 0.0);
+            for (int x = 1; x < g_Conf.widthRes + 1; x++)
             {
                 float vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
                 glVertex3f(vx, waterMain[x] * scale / g_Conf.depthRes, vyMain);
                 glVertex3f(vx, waterSub[x] * scale / g_Conf.depthRes, vySub);
+            }
+        }
+        glEnd();
+
+        // Draw polygons' edge
+        // Set polygon mode
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glBegin(GL_QUAD_STRIP);
+        {
+            glColor3f(1.0, 1.0, 1.0);
+            for (int x = 1; x < g_Conf.widthRes + 1; x++)
+            {
+                float vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
+                glVertex3f(vx, 1.0 + waterMain[x] * scale / g_Conf.depthRes, vyMain);
+                glVertex3f(vx, 1.0 + waterSub[x] * scale / g_Conf.depthRes, vySub);
             }
         }
         glEnd();

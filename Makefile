@@ -3,11 +3,11 @@
 
 # Macro Definition
 DEBUG    = -g -pg
-OPT      = -O2
+OPT      = -O0
 CC       = gcc
 CFLAGS   = $(OPT) -Wall -std=gnu99 `sdl-config --cflags` $(DEBUG)
 CXX      = g++
-CXXFLAGS = -O2 -Wall `sdl-config --cflags` $(DEBUG)
+CXXFLAGS = $(OPT) -Wall `sdl-config --cflags` $(DEBUG)
 LD       = gcc
 LDFLAGS  = $(DEBUG)
 INCLUDES = -I.
