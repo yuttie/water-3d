@@ -9,8 +9,14 @@
 
 
 /* <<< Changelog >>>
- * >>> 2004/07/22 00:08:50 <<<
- * Info: フレネル反射を実装したが、上方から当たる白い光の反射を計算するだけなので、
+ * >>> Wed, 04 Aug 2004 00:17:51 +0900 <<<
+ * New:  基本サイズの波紋の表示上の大きさがどれも同じになるようにした。
+ * New:  ウィンドウ上のマウスカーソルの座標を、仮想水面上の座標にマッピングするようにした。
+ * New:  表示上の水面の大きさを200x200の固定にした。
+ * New:  辺のみ描画するようにした。
+
+
+ * New:  sss
  */
 
 
@@ -140,9 +146,6 @@ int main(int argc, char **argv)
         // 水面をスクリーンサーフェスに描画する
         PaintToSurface(g_pScreen);
 
-        // 表示を更新
-//        SDL_UpdateRect(g_pScreen, 0, 0, 0, 0);
-        
         // 水面データを入れ替える
         PosData *tmp = g_pPrevData;
         g_pPrevData = g_pCrntData;
@@ -181,12 +184,10 @@ void InitProc(int argc, char **argv)
     // プログラムオプションのデフォルト値を設定
     g_Conf.pBgImgPath = "bgimage.bmp";
     g_Conf.depthRes = 512;
-    g_Conf.riplRadius = 5;
+    g_Conf.riplRadius = 4;
     g_Conf.riplDepth = 20.0;
-    g_Conf.widthRes = 320;
-    g_Conf.heightRes = 320;
-    g_Conf.wndWidth = g_Conf.widthRes;
-    g_Conf.wndHeight = g_Conf.heightRes;
+    g_Conf.widthRes = 160;
+    g_Conf.heightRes = 160;
     g_Conf.wndWidth = 640;
     g_Conf.wndHeight = 480;
     g_Conf.attRate = 0.99;
@@ -290,14 +291,17 @@ bool EventProc()
             // マウスのボタンが押されている時
             if (event.button.state == SDL_PRESSED)
             {
+                // ウィンドウ上の点を水面上の位置に変換
+                int vx = (float)g_Conf.widthRes * event.button.x / g_Conf.wndWidth;
+                int vy = (float)g_Conf.heightRes * event.button.y / g_Conf.wndHeight;
                 // 波紋発生可能領域にいるかどうかをチェック
-                if ((leftLimit < event.button.x) && (event.button.x < rightLimit) &&
-                    (topLimit < event.button.y) && (event.button.y < bottomLimit))
+                if ((leftLimit < vx) && (vx < rightLimit) &&
+                    (topLimit < vy) && (vy < bottomLimit))
                 {
                     // 波紋を発生
-                    RippleOut(event.button.x, event.button.y);
-                    preCsrX = event.motion.x;
-                    preCsrY = event.motion.y;
+                    RippleOut(vx, vy);
+                    preCsrX = vx;
+                    preCsrY = vy;
                 }
             }
             break;
@@ -306,18 +310,20 @@ bool EventProc()
             // マウスのボタンが押されている時
             if (event.motion.state == SDL_PRESSED)
             {
+                // ウィンドウ上の点を水面上の位置に変換
+                int vx = (float)g_Conf.widthRes * event.motion.x / g_Conf.wndWidth;
+                int vy = (float)g_Conf.heightRes * event.motion.y / g_Conf.wndHeight;
                 // 波紋発生可能領域にいるかどうかをチェック
-                if ((leftLimit < event.motion.x) && (event.motion.x < rightLimit) &&
-                    (topLimit < event.motion.y) && (event.motion.y < bottomLimit))
+                if ((leftLimit < vx) && (vx < rightLimit) &&
+                    (topLimit < vy) && (vy < bottomLimit))
                 {    // 波紋を発生
-
                     for (int i = 0; i < g_Conf.csrIPDiv; i++)
                     {
-                        RippleOut((event.motion.x * i + preCsrX * (g_Conf.csrIPDiv - i)) / g_Conf.csrIPDiv,
-                                  (event.motion.y * i + preCsrY * (g_Conf.csrIPDiv - i)) / g_Conf.csrIPDiv);
+                        RippleOut((vx * i + preCsrX * (g_Conf.csrIPDiv - i)) / g_Conf.csrIPDiv,
+                                  (vy * i + preCsrY * (g_Conf.csrIPDiv - i)) / g_Conf.csrIPDiv);
                     }
-                    preCsrX = event.motion.x;
-                    preCsrY = event.motion.y;
+                    preCsrX = vx;
+                    preCsrY = vy;
                 }
             }
             break;
@@ -496,7 +502,7 @@ void InitSDL()
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     
     // ディスプレイデバイスを初期化
@@ -512,9 +518,6 @@ void InitSDL()
     }
 
     // GL Setup
-    // shading model
-    glShadeModel(GL_SMOOTH);
-    
     // Culling
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
@@ -530,7 +533,7 @@ void InitSDL()
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     float ratio = (float)g_Conf.wndWidth / (float)g_Conf.wndHeight;
-    gluPerspective(100.0, ratio, 1.0, 1024.0);
+    gluPerspective(60.0, ratio, 1.0, 1024.0);
 }
 
 
@@ -807,27 +810,47 @@ void RippleOut(int x, int y)
 void PaintToSurface(SDL_Surface *target)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // shading model
+    glShadeModel(GL_FLAT);
+    // Depth Buffer
+    glEnable(GL_DEPTH_TEST);
     glMatrixMode(GL_MODELVIEW);
+/*
+    gluLookAt(5.0, 5.0, 5.0,     // Position of the eye point.
+              0.0, 0.0, 0.0,     // Position of the reference point.
+              0.0, 1.0, 0.0);    // Up vector.
+*/
     glLoadIdentity();
-    glTranslatef(-75.0, 0.0, -75.0);
+    glTranslatef(0.0, 0.0, -75.0);
     glRotatef(30.0, 1.0, 0.0, 0.0);
     {
-        PosData *waterData = g_pNextData;
-        float s = 200.0;
+        int pitch = g_Conf.widthRes + 2;
+        PosData *waterMain = g_pNextData;
+        PosData *waterSub = g_pNextData + pitch;
+        float s = 50.0 * 100.0 / g_Conf.riplDepth;
         for (int y = 0; y < g_Conf.heightRes -1; y++)
         {
-            for (int x = 0; x < g_Conf.widthRes - 1; x++)
+            float vyMain = -100.0 + y * 200.0 / (g_Conf.heightRes - 1);
+            float vySub = -100.0 + (y + 1) * 200.0 / (g_Conf.heightRes - 1);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            glBegin(GL_QUAD_STRIP);
             {
-                glBegin(GL_LINE_LOOP);
-                    glColor3f(1.0, 1.0, 1.0);
-                    glVertex3f(x, waterData[x + y * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y);
-                    glVertex3f(x, waterData[x + (y + 1) * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y + 1);
-                    glVertex3f(x + 1, waterData[x + 1 + (y + 1) * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y + 1);
-                    glVertex3f(x + 1, waterData[x + 1 + y * (g_Conf.widthRes + 2)] * s / g_Conf.depthRes, y);
-                glEnd();
+                int x = 0;
+                float vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
+                glColor3f(1.0, 1.0, 1.0);
+                for (x = 0; x < g_Conf.widthRes; x++)
+                {
+                    vx = -100.0 + x * 200.0 / (g_Conf.widthRes - 1);
+                    glVertex3f(vx, waterMain[x] * s / g_Conf.depthRes, vyMain);
+                    glVertex3f(vx, waterSub[x] * s / g_Conf.depthRes, vySub);
+                }
             }
+            glEnd();
+            waterMain += pitch;
+            waterSub += pitch;
         }
     }
+    // 表示を更新
     SDL_GL_SwapBuffers();
 }
 
